@@ -33,6 +33,9 @@ function cMouseDown(e) {
 
     if (x >= xs && x <= xe && y >= ys && y <= ye) {
       this.__currentIdx = i
+      if (i === pxs.length - 1) {
+        this.__currentIdx = 0
+      }
       break
     }
   }

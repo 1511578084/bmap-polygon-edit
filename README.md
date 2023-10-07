@@ -3,5 +3,5 @@
 # 使用说明
 在入口文件中引入
 ```js
-import 'bmap-polygon-edit-cvs'
+import 'bmap-polygon-edit'
 ```
