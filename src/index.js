@@ -32,9 +32,10 @@ function cMouseDown(e) {
     const ye = point.y + pointSize
 
     if (x >= xs && x <= xe && y >= ys && y <= ye) {
-      this.__currentIdx = i
       if (i === pxs.length - 1) {
         this.__currentIdx = 0
+      } else {
+        this.__currentIdx = i
       }
       break
     }
@@ -181,7 +182,7 @@ function customEdit(polygon) {
   canvas.style.position = 'absolute'
   canvas.style.left = 0
   canvas.style.top = 0
-  canvas.style.zIndex = 10
+  canvas.style.zIndex = 3
   canvas.style.width = cSize.width + 'px'
   canvas.style.height = cSize.height + 'px'
   container.appendChild(canvas)

@@ -1,12 +1,16 @@
 {
   "name": "bmap-polygon-edit",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "基于百度地图多边型编辑功能的canvas版本。",
   "main": "dist/index.js",
   "module": "src/index.js",
   "devDependencies": {
     "rollup": "^3.18.0",
     "rollup-plugin-terser": "^7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:1511578084/bmap-polygon-edit.git"
   },
   "scripts": {
     "build": "rollup -c rollup.config.mjs"
