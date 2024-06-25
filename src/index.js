@@ -266,26 +266,29 @@ function customEdit(polygon) {
 let forceCustom = false
 let minPointCounts = 100
 
-const originEnEdit = BMapGL.Polygon.prototype.enableEditing
-
-BMapGL.Polygon.prototype.enableEditing = function(forceOrigin = false) {
-  const points = this.getPath()
-  if (!forceOrigin && (forceCustom || points.length > minPointCounts)) {
-    customEdit(this)
-  } else {
-    originEnEdit.call(this)
+if (window.BMapGL && window.BMapGL.Polygon) {
+  const originEnEdit = BMapGL.Polygon.prototype.enableEditing
+  
+  BMapGL.Polygon.prototype.enableEditing = function(forceOrigin = false) {
+    const points = this.getPath()
+    if (!forceOrigin && (forceCustom || points.length > minPointCounts)) {
+      customEdit(this)
+    } else {
+      originEnEdit.call(this)
+    }
+  }
+  
+  const originDisEdit = BMapGL.Polygon.prototype.disableEditing
+  
+  BMapGL.Polygon.prototype.disableEditing = function() {
+    if (this.__disableEditing) {
+      this.__disableEditing()
+    } else {
+      originDisEdit.call(this)
+    }
   }
 }
 
-const originDisEdit = BMapGL.Polygon.prototype.disableEditing
-
-BMapGL.Polygon.prototype.disableEditing = function() {
-  if (this.__disableEditing) {
-    this.__disableEditing()
-  } else {
-    originDisEdit.call(this)
-  }
-}
 
 export const setDefaultOptions = opts => {
   pointSize = opts.pointSize || 6
