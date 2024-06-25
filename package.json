@@ -1,6 +1,6 @@
 {
   "name": "bmap-polygon-edit",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "基于百度地图多边型编辑功能的canvas版本。",
   "main": "dist/index.js",
   "module": "src/index.js",
