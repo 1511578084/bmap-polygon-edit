@@ -43,8 +43,10 @@ function cMouseDown(e) {
   // 落在节点上就禁止拖动
   if (typeof this.__currentIdx === 'number') {
     map.disableDragging()
+    this.__canvas.style.zIndex = 5
   } else {
     map.enableDragging()
+    this.__canvas.style.zIndex = 3
   }
 }
 
