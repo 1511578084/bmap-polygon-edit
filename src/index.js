@@ -235,7 +235,7 @@ function customEdit(polygon) {
         if (polygon.__currentIdx === 0 && pxs[0].equals(pxs[pxs.length - 1])) {
           // 首尾点一致，同时更新尾点
           points.pop()
-          points.push(points[0].clone())
+          if(points.length) points.push(points[0].clone())
         }
 
         polygon.setPath(points)
