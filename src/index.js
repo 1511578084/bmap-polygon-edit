@@ -75,6 +75,7 @@ function cMouseMove(e) {
 }
 
 function cMouseUp(e) {
+  this.__canvas.style.zIndex = 3
   if (typeof this.__currentIdx === 'number') {
     const polygon = this
     const map = this.map
@@ -184,7 +185,7 @@ function customEdit(polygon) {
   canvas.style.position = 'absolute'
   canvas.style.left = 0
   canvas.style.top = 0
-  canvas.style.zIndex = 5
+  canvas.style.zIndex = 3
   canvas.style.width = cSize.width + 'px'
   canvas.style.height = cSize.height + 'px'
   container.appendChild(canvas)

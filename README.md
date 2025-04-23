@@ -4,4 +4,6 @@
 在入口文件中引入
 ```js
 import 'bmap-polygon-edit'
+npm version patch 打补丁
+npm publish 发布
 ```
