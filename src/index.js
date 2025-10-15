@@ -10,33 +10,51 @@ function tp({ lat, lng }) {
   return new BMapGL.Point(lng, lat)
 }
 function transferPoint(point) {
-  // 获取百度坐标
-  const { lat, lng, latLng } = point
-  if (latLng) return tp(latLng)
-  return tp({ lat, lng })
+  if (Array.isArray(point)) {
+    return point.map(item => {
+      // 获取百度坐标
+      const { lat, lng, latLng } = item
+      if (latLng) return tp(latLng)
+      return tp({ lat, lng })
+    })
+  } else {
+    // 获取百度坐标
+    const { lat, lng, latLng } = point
+    if (latLng) return tp(latLng)
+    return tp({ lat, lng })
+  }
 }
 
 function cMouseDown(e) {
   const map = this.map
-  const pxs = this.__pxs
+  const pxsArr = this.__pxs
   const x = e.offsetX
   const y = e.offsetY
-
+  // 判断落在哪个路径上
+  this.__currentLineIdx = 0
   // 判断落点在哪个点上
   this.__currentIdx = null
-  for (let i = pxs.length - 1; i >= 0; i--) {
-    const point = pxs[i]
-    const xs = point.x - pointSize
-    const xe = point.x + pointSize
-    const ys = point.y - pointSize
-    const ye = point.y + pointSize
-
-    if (x >= xs && x <= xe && y >= ys && y <= ye) {
-      if (i === pxs.length - 1) {
-        this.__currentIdx = 0
-      } else {
-        this.__currentIdx = i
+  for (let index = 0; index < pxsArr.length; index++) {
+    const pxs = pxsArr[index]
+    let flag = false
+    for (let i = pxs.length - 1; i >= 0; i--) {
+      const point = pxs[i]
+      const xs = point.x - pointSize
+      const xe = point.x + pointSize
+      const ys = point.y - pointSize
+      const ye = point.y + pointSize
+      if (x >= xs && x <= xe && y >= ys && y <= ye) {
+        flag = true
+        if (i === pxs.length - 1) {
+          this.__currentIdx = 0
+        } else {
+          this.__currentIdx = i
+        }
+        break
       }
+    }
+    if (flag) {
+      this.__currentLineIdx = index
       break
     }
   }
@@ -54,17 +72,32 @@ function cMouseMove(e) {
   // 落在点上
   if (typeof this.__currentIdx === 'number') {
     const map = this.map
-    const pxs = this.__pxs
+    const pxs = this.__pxs[this.__currentLineIdx]
     const x = e.offsetX
     const y = e.offsetY
     const isReal = this.__currentIdx % 2 === 0
     if (isReal) {
       // 是实点，更新该实点的坐标位置
       const realIdx = pxs[this.__currentIdx].realIdx
-      this.__drawPolygon.setPositionAt(realIdx, map.pixelToPoint(new BMapGL.Pixel(x, y)))
-      if (this.__currentIdx === 0 && pxs[0].equals(pxs[pxs.length - 1])) {
-        // 首尾点一致，同时更新尾点
-        this.__drawPolygon.setPositionAt(pxs[pxs.length - 1].realIdx, map.pixelToPoint(new BMapGL.Pixel(x, y)))
+      const newPoint = map.pixelToPoint(new BMapGL.Pixel(x, y))
+      // 判断是否是镂空多边形
+      const allPoints = this.__drawPolygon.getPoints().map(transferPoint)
+      const isHollow = allPoints.some(point => Array.isArray(point))
+
+      if (isHollow) {
+        // 镂空多边形，需要传入路径索引
+        this.__drawPolygon.setPositionAt(realIdx, newPoint, this.__currentLineIdx)
+        if (this.__currentIdx === 0 && pxs[0].equals(pxs[pxs.length - 1])) {
+          // 首尾点一致，同时更新尾点
+          this.__drawPolygon.setPositionAt(pxs[pxs.length - 1].realIdx, newPoint, this.__currentLineIdx)
+        }
+      } else {
+        // 单面多边形，不传路径索引。如果传路径索引，百度会报错
+        this.__drawPolygon.setPositionAt(realIdx, newPoint)
+        if (this.__currentIdx === 0 && pxs[0].equals(pxs[pxs.length - 1])) {
+          // 首尾点一致，同时更新尾点
+          this.__drawPolygon.setPositionAt(pxs[pxs.length - 1].realIdx, newPoint)
+        }
       }
       renderCanvas.bind(this)()
     } else {
@@ -79,20 +112,27 @@ function cMouseUp(e) {
   if (typeof this.__currentIdx === 'number') {
     const polygon = this
     const map = this.map
-    const pxs = this.__pxs
+    const pxs = this.__pxs[polygon.__currentLineIdx]
     // 如果是虚点，要去更新多边形的路径
     const isSham = this.__currentIdx % 2 !== 0
-    const points = polygon.__drawPolygon.getPoints().map(transferPoint)
+    let points = []
+    const allPoints = polygon.__drawPolygon.getPoints().map(transferPoint)
+    if (allPoints.some(point => Array.isArray(point))) {
+      points = allPoints[polygon.__currentLineIdx]
+    } else {
+      points = allPoints
+    }
     if (isSham) {
       const x = e.offsetX
       const y = e.offsetY
       const realIdx = pxs[this.__currentIdx - 1].realIdx
       points.splice(realIdx + 1, 0, map.pixelToPoint(new BMapGL.Pixel(x, y)))
-      polygon.__drawPolygon.setPath(points)
+      polygon.__drawPolygon.setPath(allPoints)
       renderCanvas.bind(this)()
     }
-    polygon.setPath(points)
+    polygon.setPath(allPoints)
     polygon.__currentIdx = null
+    polygon.__currentLineIdx = 0
     this.dispatchEvent('lineupdate', { target: this, custom: true })
     map.enableDragging()
   }
@@ -111,18 +151,33 @@ function renderCanvas(isSham, shamInfo) {
   const cvSize = map.getSize()
   // 获取路径点
   const points = polygon.__drawPolygon.getPoints().map(transferPoint)
-  let pxs = points.map(point => map.pointToPixel(point))
+
   // 转换为像素位置
   const ctx = polygon.__canvas.getContext('2d')
   ctx.clearRect(0, 0, cvSize.width, cvSize.height)
-  // 画多边形
+
+  let outerPolygon = []
+  let innerPolygons = []
+  polygon.__pxs = []
+
+  if (points.some(item => Array.isArray(item))) {
+    // 镂空多边形格式：[[外环], [内环1], [内环2], ...]
+    outerPolygon = points[0]
+    innerPolygons = points.length > 1 ? points.filter((item, index) => index !== 0) : []
+  } else {
+    // 单面多边形
+    outerPolygon = points
+  }
+
+  let outPxs = outerPolygon.map(point => map.pointToPixel(point))
   const { fillColor, fillOpacity, strokeColor, strokeOpacity, strokeWeight } = polygon.__polyOptions
+
+  // 画镂空多边形的线
   ctx.beginPath()
-  ctx.lineWidth = strokeWeight
-  ctx.moveTo(pxs[0].x, pxs[0].y)
-  pxs.forEach((point, i) => {
+  ctx.moveTo(outPxs[0].x, outPxs[0].y)
+  outPxs.forEach((point, i) => {
     // 虚点拖动时，要将虚点插入
-    if (typeof isSham === 'boolean' && shamInfo && shamInfo.realIdx + 1 === i) {
+    if (polygon.__currentLineIdx === 0 && typeof isSham === 'boolean' && shamInfo && shamInfo.realIdx + 1 === i) {
       const { x, y } = shamInfo
       ctx.lineTo(x, y)
       ctx.lineTo(point.x, point.y)
@@ -131,24 +186,43 @@ function renderCanvas(isSham, shamInfo) {
     }
   })
   ctx.closePath()
+
+  innerPolygons.forEach((innerPolygon, index) => {
+    const innerPxs = innerPolygon.map(point => map.pointToPixel(point))
+    if(innerPxs.length) ctx.moveTo(innerPxs[0].x, innerPxs[0].y)
+    innerPxs.forEach((point, i) => {
+      // 虚点拖动时，要将虚点插入
+      // 内环的索引需要+1，因为__currentLineIdx为0时是外环
+      if (polygon.__currentLineIdx === index + 1 && typeof isSham === 'boolean' && shamInfo && shamInfo.realIdx + 1 === i) {
+        const { x, y } = shamInfo
+        ctx.lineTo(x, y)
+        ctx.lineTo(point.x, point.y)
+      } else {
+        ctx.lineTo(point.x, point.y)
+      }
+    })
+    ctx.closePath()
+  })
+
+  ctx.lineWidth = strokeWeight
   ctx.fillStyle = hexToRgba(fillColor, fillOpacity)
   ctx.strokeStyle = hexToRgba(strokeColor, strokeOpacity)
-  ctx.fill()
+  ctx.fill('evenodd')
   ctx.stroke()
-  // 画实点和虚点
-  // 拆入虚点
-  pxs = pxs.reduce((pre, item, i) => {
-    // 存储在points中的真实位置
+
+  // 画镂空外边形的点
+  outPxs = outPxs.reduce((pre, item, i) => {
+    // 存储在outerPolygon中的真实位置
     item.realIdx = i
-    const next = points[i + 1]
+    const next = outerPolygon[i + 1]
     if (next) {
       let shamNode = null
       // 如果拖动了虚点，则虚点的位置不再通过计算获得
-      if (typeof isSham === 'boolean' && shamInfo && shamInfo.realIdx === i) {
+      if (polygon.__currentLineIdx === 0 && typeof isSham === 'boolean' && shamInfo && shamInfo.realIdx === i) {
         const { x, y } = shamInfo
         shamNode = new BMapGL.Pixel(x, y)
       } else {
-        const cur = points[i]
+        const cur = outerPolygon[i]
         const center = {
           lat: (cur.lat + next.lat) / 2,
           lng: (cur.lng + next.lng) / 2
@@ -159,9 +233,11 @@ function renderCanvas(isSham, shamInfo) {
     }
     return pre.concat(item)
   }, [])
+  polygon.__pxs.push(outPxs)
+
   ctx.beginPath()
   ctx.lineWidth = 1
-  pxs.forEach((point, i) => {
+  outPxs.forEach((point, i) => {
     ctx.fillStyle = `rgba(255, 255, 255, ${1 - (i % 2)})`
     ctx.fillRect(point.x - pointSize, point.y - pointSize, pointSize * 2, pointSize * 2)
     ctx.fill()
@@ -170,7 +246,46 @@ function renderCanvas(isSham, shamInfo) {
     ctx.stroke()
   })
   ctx.closePath()
-  polygon.__pxs = pxs
+
+  innerPolygons.forEach((innerPolygon, index) => {
+    let innerPxs = innerPolygon.map(point => map.pointToPixel(point))
+    innerPxs = innerPxs.reduce((pre, item, i) => {
+      // 存储在innerPolygon中的真实位置
+      item.realIdx = i
+      const next = innerPolygon[i + 1]
+      if (next) {
+        let shamNode = null
+        // 如果拖动了虚点，则虚点的位置不再通过计算获得
+        // 内环的索引需要+1，因为__currentLineIdx为0时是外环
+        if (polygon.__currentLineIdx === index + 1 && typeof isSham === 'boolean' && shamInfo && shamInfo.realIdx === i) {
+          const { x, y } = shamInfo
+          shamNode = new BMapGL.Pixel(x, y)
+        } else {
+          const cur = innerPolygon[i]
+          const center = {
+            lat: (cur.lat + next.lat) / 2,
+            lng: (cur.lng + next.lng) / 2
+          }
+          shamNode = map.pointToPixel(new BMapGL.Point(center.lng, center.lat))
+        }
+        return pre.concat([item, shamNode])
+      }
+      return pre.concat(item)
+    }, [])
+    polygon.__pxs.push(innerPxs)
+
+    ctx.beginPath()
+    ctx.lineWidth = 1
+    innerPxs.forEach((point, i) => {
+      ctx.fillStyle = `rgba(255, 255, 255, ${1 - (i % 2)})`
+      ctx.fillRect(point.x - pointSize, point.y - pointSize, pointSize * 2, pointSize * 2)
+      ctx.fill()
+      ctx.strokeRect(point.x - pointSize, point.y - pointSize, pointSize * 2, pointSize * 2)
+      ctx.strokeStyle = 'rgba(0, 0, 0, 1)'
+      ctx.stroke()
+    })
+    ctx.closePath()
+  })
 }
 
 function customEdit(polygon) {
@@ -200,11 +315,21 @@ function customEdit(polygon) {
     strokeWeight: polygon.getStrokeWeight()
   }
 
-  const polyline = points.map(transferPoint).map(item => new BMapGL.Point(item.lng, item.lat))
-  const drawPolygon = new BMapGL.Polygon(polyline)
+  const polyline = points.map(transferPoint)
+  // 处理镂空多边形的路径转换
+  let drawPolyline = polyline
+  if (Array.isArray(polyline[0])) {
+    // 镂空多边形，需要递归转换
+    drawPolyline = polyline.map(ring => ring.map(item => new BMapGL.Point(item.lng, item.lat)))
+  } else {
+    // 单面多边形
+    drawPolyline = polyline.map(item => new BMapGL.Point(item.lng, item.lat))
+  }
+  const drawPolygon = new BMapGL.Polygon(drawPolyline)
   const bindRenderCanvas = renderCanvas.bind(polygon)
   polygon.__polyOptions = polyOptions
   polygon.__drawPolygon = drawPolygon
+  polygon.__currentLineIdx = 0
   const originSetPath = polygon.setPath
   polygon.setPath = function(points) {
     if (this.__drawPolygon) {
@@ -228,21 +353,28 @@ function customEdit(polygon) {
       const isReal = polygon.__currentIdx % 2 === 0
       if (isReal) {
         // 删除该点
-        const pxs = polygon.__pxs
+        const pxs = polygon.__pxs[polygon.__currentLineIdx]
         const realIdx = pxs[polygon.__currentIdx].realIdx
-        const points = polygon.getPoints().map(transferPoint)
+        const allPoints = polygon.getPoints().map(transferPoint)
+        let points = []
+        if (allPoints.some(point => Array.isArray(point))) {
+          points = allPoints[polygon.__currentLineIdx]
+        } else {
+          points = allPoints
+        }
         points.splice(realIdx, 1)
         if (polygon.__currentIdx === 0 && pxs[0].equals(pxs[pxs.length - 1])) {
           // 首尾点一致，同时更新尾点
           points.pop()
-          if(points.length) points.push(points[0].clone())
+          if(points.length > 0) points.push(points[0].clone())
         }
 
-        polygon.setPath(points)
+        polygon.setPath(allPoints)
       }
 
       map.enableDragging()
       polygon.__currentIdx = null
+      polygon.__currentLineIdx = 0
     }
   }
   container.addEventListener('mousedown', bindMouseDown)
@@ -255,6 +387,7 @@ function customEdit(polygon) {
     polygon.__pxs = undefined
     polygon.__drawPolygon = undefined
     polygon.__polyOptions = undefined
+    polygon.__currentLineIdx = 0
     container.removeChild(canvas)
     map.removeEventListener('zooming', bindRenderCanvas)
     map.removeEventListener('moving', bindRenderCanvas)
