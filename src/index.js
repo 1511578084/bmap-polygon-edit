@@ -73,6 +73,10 @@ function cMouseMove(e) {
   if (typeof this.__currentIdx === 'number') {
     const map = this.map
     const pxs = this.__pxs[this.__currentLineIdx]
+    // renderCanvas / 外部 setPath 可能使 __pxs 与 __currentIdx 短暂不同步，避免读 undefined.realIdx
+    if (!pxs || !pxs.length || this.__currentIdx < 0 || this.__currentIdx >= pxs.length) {
+      return
+    }
     const x = e.offsetX
     const y = e.offsetY
     const isReal = this.__currentIdx % 2 === 0
@@ -102,7 +106,11 @@ function cMouseMove(e) {
       renderCanvas.bind(this)()
     } else {
       // 是虚点，插入两个
-      renderCanvas.bind(this)(true, { x, y, realIdx: pxs[this.__currentIdx - 1].realIdx })
+      const prevPx = pxs[this.__currentIdx - 1]
+      if (!prevPx || typeof prevPx.realIdx !== 'number') {
+        return
+      }
+      renderCanvas.bind(this)(true, { x, y, realIdx: prevPx.realIdx })
     }
   }
 }
@@ -113,6 +121,12 @@ function cMouseUp(e) {
     const polygon = this
     const map = this.map
     const pxs = this.__pxs[polygon.__currentLineIdx]
+    if (!pxs || !pxs.length) {
+      polygon.__currentIdx = null
+      polygon.__currentLineIdx = 0
+      map.enableDragging()
+      return
+    }
     // 如果是虚点，要去更新多边形的路径
     const isSham = this.__currentIdx % 2 !== 0
     let points = []
@@ -125,7 +139,14 @@ function cMouseUp(e) {
     if (isSham) {
       const x = e.offsetX
       const y = e.offsetY
-      const realIdx = pxs[this.__currentIdx - 1].realIdx
+      const prevPx = pxs[this.__currentIdx - 1]
+      if (!prevPx || typeof prevPx.realIdx !== 'number') {
+        polygon.__currentIdx = null
+        polygon.__currentLineIdx = 0
+        map.enableDragging()
+        return
+      }
+      const realIdx = prevPx.realIdx
       points.splice(realIdx + 1, 0, map.pixelToPoint(new BMapGL.Pixel(x, y)))
       polygon.__drawPolygon.setPath(allPoints)
       renderCanvas.bind(this)()
