@@ -428,6 +428,8 @@ if (window.BMapGL && window.BMapGL.Polygon) {
   
   BMapGL.Polygon.prototype.enableEditing = function(forceOrigin = false) {
     const points = this.getPath()
+    if (this.points.length < 2) return
+
     if (!forceOrigin && (forceCustom || points.length > minPointCounts)) {
       customEdit(this)
     } else {
